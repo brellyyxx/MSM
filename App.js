@@ -102,6 +102,45 @@ export default function App() {
     );
   };
 
+  // --- NEU: Einzelnen History-Eintrag löschen ---
+  const handleDeleteItem = (id) => {
+    Alert.alert(
+      "Delete Entry",
+      "Are you sure you want to delete this specific streak record?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const updatedHistory = history.filter(item => item.id !== id);
+            setHistory(updatedHistory);
+            await AsyncStorage.setItem('streakHistory', JSON.stringify(updatedHistory));
+          }
+        }
+      ]
+    );
+  };
+
+  // --- NEU: Komplettes History löschen ---
+  const handleClearHistory = () => {
+    Alert.alert(
+      "Clear History",
+      "Are you sure you want to delete all past streak records?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear All",
+          style: "destructive",
+          onPress: async () => {
+            setHistory([]);
+            await AsyncStorage.removeItem('streakHistory');
+          }
+        }
+      ]
+    );
+  };
+
   // Hilfsfunktion: Millisekunden in lesbare Tage/Stunden/Minuten umwandeln
   const formatDuration = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -117,20 +156,19 @@ export default function App() {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // --- NEU: Sortier-Funktion für die History ---
+  // Sortier-Funktion für die History
   const getSortedHistory = () => {
-    // Wir machen eine Kopie der Liste, damit wir das Original nicht beschädigen
     const listCopy = [...history];
 
     return listCopy.sort((a, b) => {
       if (sortBy === 'newest') {
-        return b.endDate - a.endDate; // Neuestes Enddatum zuerst
+        return b.endDate - a.endDate;
       } else if (sortBy === 'oldest') {
-        return a.endDate - b.endDate; // Ältestes Enddatum zuerst
+        return a.endDate - b.endDate;
       } else if (sortBy === 'longest') {
-        return b.durationMs - a.durationMs; // Längster Streak zuerst
+        return b.durationMs - a.durationMs;
       } else if (sortBy === 'shortest') {
-        return a.durationMs - b.durationMs; // Kürzester Streak zuerst
+        return a.durationMs - b.durationMs;
       }
       return 0;
     });
@@ -159,41 +197,48 @@ export default function App() {
         </TouchableOpacity>
 
         {showHistory ? (
-          /* HIER IST DIE HISTORY-ANSICHT MIT FILTERN */
+          /* HIER IST DIE HISTORY-ANSICHT */
           <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
             <Text style={styles.historyTitle}>Past Streaks</Text>
 
             {/* Filter-Buttons nebeneinander */}
             {history.length > 0 && (
-              <View style={styles.filterRow}>
-                <TouchableOpacity 
-                  style={[styles.filterButton, sortBy === 'newest' && styles.filterActive]} 
-                  onPress={() => setSortBy('newest')}
-                >
-                  <Text style={[styles.filterText, sortBy === 'newest' && styles.filterTextActive]}>Newest</Text>
-                </TouchableOpacity>
+              <>
+                <View style={styles.filterRow}>
+                  <TouchableOpacity 
+                    style={[styles.filterButton, sortBy === 'newest' && styles.filterActive]} 
+                    onPress={() => setSortBy('newest')}
+                  >
+                    <Text style={[styles.filterText, sortBy === 'newest' && styles.filterTextActive]}>Newest</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.filterButton, sortBy === 'oldest' && styles.filterActive]} 
-                  onPress={() => setSortBy('oldest')}
-                >
-                  <Text style={[styles.filterText, sortBy === 'oldest' && styles.filterTextActive]}>Oldest</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.filterButton, sortBy === 'oldest' && styles.filterActive]} 
+                    onPress={() => setSortBy('oldest')}
+                  >
+                    <Text style={[styles.filterText, sortBy === 'oldest' && styles.filterTextActive]}>Oldest</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.filterButton, sortBy === 'longest' && styles.filterActive]} 
-                  onPress={() => setSortBy('longest')}
-                >
-                  <Text style={[styles.filterText, sortBy === 'longest' && styles.filterTextActive]}>Longest</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.filterButton, sortBy === 'longest' && styles.filterActive]} 
+                    onPress={() => setSortBy('longest')}
+                  >
+                    <Text style={[styles.filterText, sortBy === 'longest' && styles.filterTextActive]}>Longest</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.filterButton, sortBy === 'shortest' && styles.filterActive]} 
-                  onPress={() => setSortBy('shortest')}
-                >
-                  <Text style={[styles.filterText, sortBy === 'shortest' && styles.filterTextActive]}>Shortest</Text>
+                  <TouchableOpacity 
+                    style={[styles.filterButton, sortBy === 'shortest' && styles.filterActive]} 
+                    onPress={() => setSortBy('shortest')}
+                  >
+                    <Text style={[styles.filterText, sortBy === 'shortest' && styles.filterTextActive]}>Shortest</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Clear All Button */}
+                <TouchableOpacity style={styles.clearAllButton} onPress={handleClearHistory}>
+                  <Text style={styles.clearAllText}>Clear All History</Text>
                 </TouchableOpacity>
-              </View>
+              </>
             )}
 
             {history.length === 0 ? (
@@ -201,7 +246,13 @@ export default function App() {
             ) : (
               getSortedHistory().map((item) => (
                 <View key={item.id} style={styles.historyCard}>
-                  <Text style={styles.historyDuration}>{formatDuration(item.durationMs)}</Text>
+                  <View style={styles.historyCardHeader}>
+                    <Text style={styles.historyDuration}>{formatDuration(item.durationMs)}</Text>
+                    {/* Einzelner Lösch-Button */}
+                    <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteButton}>
+                      <Text style={styles.deleteButtonText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
                   <Text style={styles.historyDate}>From: {formatDate(item.startDate)}</Text>
                   <Text style={styles.historyDate}>To: {formatDate(item.endDate)}</Text>
                 </View>
@@ -335,7 +386,7 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
-    marginBottom: 15,
+    marginBottom: 10,
     width: '90%',
     justifyContent: 'space-between',
   },
@@ -359,6 +410,15 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#1c293b',
   },
+  clearAllButton: {
+    marginBottom: 15,
+    paddingVertical: 5,
+  },
+  clearAllText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   emptyText: {
     color: '#94a3b8',
     fontSize: 14,
@@ -373,11 +433,24 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 12,
   },
+  historyCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
   historyDuration: {
     color: '#38bdf8',
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 5,
+  },
+  deleteButton: {
+    padding: 5,
+  },
+  deleteButtonText: {
+    color: '#ef4444',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   historyDate: {
     color: '#94a3b8',
