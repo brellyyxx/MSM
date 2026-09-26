@@ -9,7 +9,8 @@ export default function App() {
   const [elapsedTime, setElapsedTime] = useState({ days: 0, hours: 0, minutes: 0 });
   const [bestStreakMs, setBestStreakMs] = useState(0);
   const [history, setHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false); // Schaltet zwischen Timer und History um
+  const [showHistory, setShowHistory] = useState(false);
+  const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'longest', 'shortest'
 
   // 1. Daten beim Start laden
   useEffect(() => {
@@ -79,7 +80,6 @@ export default function App() {
           onPress: async () => {
             const now = Date.now();
             
-            // Wenn es einen vorherigen Start gab, speichern wir den alten Streak in der History
             if (lastResetTime) {
               const duration = now - lastResetTime;
               const newHistoryItem = {
@@ -111,10 +111,29 @@ export default function App() {
     return `${days} Days, ${hours} Hours, ${minutes} Min`;
   };
 
-  // Hilfsfunktion: Datum formatirieren (z.B. "15.5.2026, 14:30")
+  // Hilfsfunktion: Datum formatieren
   const formatDate = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // --- NEU: Sortier-Funktion für die History ---
+  const getSortedHistory = () => {
+    // Wir machen eine Kopie der Liste, damit wir das Original nicht beschädigen
+    const listCopy = [...history];
+
+    return listCopy.sort((a, b) => {
+      if (sortBy === 'newest') {
+        return b.endDate - a.endDate; // Neuestes Enddatum zuerst
+      } else if (sortBy === 'oldest') {
+        return a.endDate - b.endDate; // Ältestes Enddatum zuerst
+      } else if (sortBy === 'longest') {
+        return b.durationMs - a.durationMs; // Längster Streak zuerst
+      } else if (sortBy === 'shortest') {
+        return a.durationMs - b.durationMs; // Kürzester Streak zuerst
+      }
+      return 0;
+    });
   };
 
   // Rekord umrechnen
@@ -140,13 +159,47 @@ export default function App() {
         </TouchableOpacity>
 
         {showHistory ? (
-          /* HIER IST DIE HISTORY-ANSICHT */
+          /* HIER IST DIE HISTORY-ANSICHT MIT FILTERN */
           <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
             <Text style={styles.historyTitle}>Past Streaks</Text>
+
+            {/* Filter-Buttons nebeneinander */}
+            {history.length > 0 && (
+              <View style={styles.filterRow}>
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'newest' && styles.filterActive]} 
+                  onPress={() => setSortBy('newest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'newest' && styles.filterTextActive]}>Newest</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'oldest' && styles.filterActive]} 
+                  onPress={() => setSortBy('oldest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'oldest' && styles.filterTextActive]}>Oldest</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'longest' && styles.filterActive]} 
+                  onPress={() => setSortBy('longest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'longest' && styles.filterTextActive]}>Longest</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'shortest' && styles.filterActive]} 
+                  onPress={() => setSortBy('shortest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'shortest' && styles.filterTextActive]}>Shortest</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {history.length === 0 ? (
               <Text style={styles.emptyText}>No history yet. Reset your counter to save entries!</Text>
             ) : (
-              history.map((item) => (
+              getSortedHistory().map((item) => (
                 <View key={item.id} style={styles.historyCard}>
                   <Text style={styles.historyDuration}>{formatDuration(item.durationMs)}</Text>
                   <Text style={styles.historyDate}>From: {formatDate(item.startDate)}</Text>
@@ -206,7 +259,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 20,
-    marginBottom: 20,
+    marginBottom: 15,
   },
   toggleButtonText: {
     color: '#38bdf8',
@@ -278,7 +331,33 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  filterRow: {
+    flexDirection: 'row',
     marginBottom: 15,
+    width: '90%',
+    justifyContent: 'space-between',
+  },
+  filterButton: {
+    backgroundColor: '#24344d',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  filterActive: {
+    backgroundColor: '#38bdf8',
+    borderColor: '#38bdf8',
+  },
+  filterText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  filterTextActive: {
+    color: '#1c293b',
   },
   emptyText: {
     color: '#94a3b8',
