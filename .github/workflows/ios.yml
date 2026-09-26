@@ -20,6 +20,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Swift
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_16.4.app/Contents/Developer
+          swift --version
+
       - name: Expo prebuild
         run: npx expo prebuild --platform ios --clean
 
