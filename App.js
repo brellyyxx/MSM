@@ -20,36 +20,35 @@ function MainApp() {
   const [showMilestones, setShowMilestones] = useState(false);
   const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'longest', 'shortest'
 
-  // State für das Vollbild-Pokal-Modal beim Klick auf einen Meilenstein
+  // Modal State für Badge/Pokal Ansicht
   const [selectedMilestone, setSelectedMilestone] = useState(null);
 
-  // States für das Reset-Notizen-Modal
+  // States für das Notizen-Popup nach Reset
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [resetNoteText, setResetNoteText] = useState('');
   const [pendingResetData, setPendingResetData] = useState(null);
 
-  // 1. Daten beim Start laden
+  // Async storage beim App-Start auslesen
   useEffect(() => {
     loadSavedData();
   }, []);
 
-  // 2. Live-Timer jede Sekunde aktualisieren
+  // Timer-Interval (sekündlicher Tick)
   useEffect(() => {
     if (!lastResetTime || showHistory || showMilestones || showNoteModal) return;
 
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const difference = now - lastResetTime;
+    const timerInterval = setInterval(() => {
+      const diff = Date.now() - lastResetTime;
 
-      const totalSeconds = Math.floor(difference / 1000);
-      const days = Math.floor(totalSeconds / (3600 * 24));
-      const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const totalSec = Math.floor(diff / 1000);
+      const days = Math.floor(totalSec / (3600 * 24));
+      const hours = Math.floor((totalSec % (3600 * 24)) / 3600);
+      const minutes = Math.floor((totalSec % 3600) / 60);
 
       setElapsedTime({ days, hours, minutes });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(timerInterval);
   }, [lastResetTime, showHistory, showMilestones, showNoteModal]);
 
   const loadSavedData = async () => {
@@ -68,12 +67,12 @@ function MainApp() {
       if (savedHistory) {
         setHistory(JSON.parse(savedHistory));
       }
-    } catch (error) {
-      console.log("Fehler beim Laden:", error);
+    } catch (err) {
+      console.log("Storage load failed:", err);
     }
   };
 
-  // 3. Reset-Logik: Öffnet erst das Alert und danach das Notizen-Modal
+  // Reset triggern mit Sicherheitsabfrage
   const handleReset = () => {
     Alert.alert(
       "Reset Counter",
@@ -83,6 +82,7 @@ function MainApp() {
         { 
           text: "Reset", 
           style: "destructive", 
+          press: undefined,
           onPress: () => {
             const now = Date.now();
             if (lastResetTime) {
@@ -94,7 +94,6 @@ function MainApp() {
                 durationMs: duration,
               });
             }
-            // Notiz-Modal öffnen
             setResetNoteText('');
             setShowNoteModal(true);
           } 
@@ -103,30 +102,27 @@ function MainApp() {
     );
   };
 
-  // Wenn der Nutzer die Notiz speichert (oder überspringt)
-  const handleSaveResetWithNote = async (skipNote = false) => {
+  const handleSaveResetWithNote = async (skip = false) => {
     if (!pendingResetData) return;
 
-    const finalItem = {
+    const entry = {
       ...pendingResetData,
-      note: skipNote ? '' : resetNoteText.trim(),
+      note: skip ? '' : resetNoteText.trim(),
     };
 
-    const updatedHistory = [finalItem, ...history];
-    setHistory(updatedHistory);
-    await AsyncStorage.setItem('streakHistory', JSON.stringify(updatedHistory));
+    const newHistory = [entry, ...history];
+    setHistory(newHistory);
+    await AsyncStorage.setItem('streakHistory', JSON.stringify(newHistory));
 
     const now = Date.now();
     setLastResetTime(now);
     await AsyncStorage.setItem('lastResetTime', now.toString());
 
-    // Aufräumen & Modal schließen
     setPendingResetData(null);
     setShowNoteModal(false);
     setResetNoteText('');
   };
 
-  // Alles komplett zurücksetzen (für Tests)
   const handleClearAllStorage = () => {
     Alert.alert(
       "Clear All Data",
@@ -143,8 +139,8 @@ function MainApp() {
               const now = Date.now();
               setLastResetTime(now);
               await AsyncStorage.setItem('lastResetTime', now.toString());
-            } catch (error) {
-              console.log("Fehler beim Zurücksetzen:", error);
+            } catch (err) {
+              console.log("Wipe error:", err);
             }
           }
         }
@@ -152,7 +148,6 @@ function MainApp() {
     );
   };
 
-  // Einzelnen History-Eintrag löschen
   const handleDeleteItem = (id) => {
     Alert.alert(
       "Delete Entry",
@@ -163,16 +158,15 @@ function MainApp() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            const updatedHistory = history.filter(item => item.id !== id);
-            setHistory(updatedHistory);
-            await AsyncStorage.setItem('streakHistory', JSON.stringify(updatedHistory));
+            const filtered = history.filter(item => item.id !== id);
+            setHistory(filtered);
+            await AsyncStorage.setItem('streakHistory', JSON.stringify(filtered));
           }
         }
       ]
     );
   };
 
-  // Komplettes History löschen
   const handleClearHistory = () => {
     Alert.alert(
       "Clear History",
@@ -191,55 +185,43 @@ function MainApp() {
     );
   };
 
-  // Hilfsfunktion: Millisekunden in lesbare Tage/Stunden/Minuten umwandeln
   const formatDuration = (ms) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const days = Math.floor(totalSeconds / (3600 * 24));
-    const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    return `${days} Days, ${hours} Hours, ${minutes} Min`;
+    const sec = Math.floor(ms / 1000);
+    const d = Math.floor(sec / (3600 * 24));
+    const h = Math.floor((sec % (3600 * 24)) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return `${d} Days, ${h} Hours, ${m} Min`;
   };
 
-  // Hilfsfunktion: Datum formatieren
-  const formatDate = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatDate = (ts) => {
+    const dt = new Date(ts);
+    return dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Sortier-Funktion für die History
   const getSortedHistory = () => {
-    const listCopy = [...history];
-
-    return listCopy.sort((a, b) => {
-      if (sortBy === 'newest') {
-        return b.endDate - a.endDate;
-      } else if (sortBy === 'oldest') {
-        return a.endDate - b.endDate;
-      } else if (sortBy === 'longest') {
-        return b.durationMs - a.durationMs;
-      } else if (sortBy === 'shortest') {
-        return a.durationMs - b.durationMs;
-      }
+    const copy = [...history];
+    return copy.sort((a, b) => {
+      if (sortBy === 'newest') return b.endDate - a.endDate;
+      if (sortBy === 'oldest') return a.endDate - b.endDate;
+      if (sortBy === 'longest') return b.durationMs - a.durationMs;
+      if (sortBy === 'shortest') return a.durationMs - b.durationMs;
       return 0;
     });
   };
 
-  // Statistiken berechnen
   const totalResets = history.length;
-  const totalCleanTimeMs = history.reduce((sum, item) => sum + item.durationMs, 0);
+  const totalCleanTimeMs = history.reduce((acc, cur) => acc + cur.durationMs, 0);
   const averageMs = totalResets > 0 ? Math.floor(totalCleanTimeMs / totalResets) : 0;
 
-  // REKORD AUTOMATISCH AUS DER HISTORY ERMITTELN
   const currentActiveMs = lastResetTime ? Date.now() - lastResetTime : 0;
-  const longestHistoryMs = history.length > 0 ? Math.max(...history.map(item => item.durationMs)) : 0;
+  const longestHistoryMs = history.length > 0 ? Math.max(...history.map(i => i.durationMs)) : 0;
   const bestStreakMs = Math.max(currentActiveMs, longestHistoryMs);
 
-  const recordTotalSeconds = Math.floor(bestStreakMs / 1000);
-  const recordDays = Math.floor(recordTotalSeconds / (3600 * 24));
-  const recordHours = Math.floor((recordTotalSeconds % (3600 * 24)) / 3600);
-  const recordMinutes = Math.floor((recordTotalSeconds % 3600) / 60);
+  const recSec = Math.floor(bestStreakMs / 1000);
+  const recDays = Math.floor(recSec / (3600 * 24));
+  const recHours = Math.floor((recSec % (3600 * 24)) / 3600);
+  const recMinutes = Math.floor((recSec % 3600) / 60);
 
-  // Meilensteine Definition
   const milestonesList = [
     { id: '1', days: 1, title: '24 Hours', desc: 'The first full day mastered.' },
     { id: '2', days: 3, title: '3 Days', desc: 'Getting through the initial phase.' },
@@ -253,27 +235,25 @@ function MainApp() {
     { id: '10', days: 365, title: '1 Year', desc: 'Legendary status: 365 days.' },
   ];
 
-  // Prüfen, ob ein Meilenstein erreicht wurde
   const isMilestoneUnlocked = (targetDays) => {
     const targetMs = targetDays * 24 * 3600 * 1000;
     if (currentActiveMs >= targetMs) return true;
-    return history.some(item => item.durationMs >= targetMs);
+    return history.some(i => i.durationMs >= targetMs);
   };
 
-  // Fortschritt in Prozent für einen bestimmten Meilenstein berechnen
   const getMilestoneProgress = (targetDays) => {
     const targetMs = targetDays * 24 * 3600 * 1000;
     const maxAchieved = Math.max(currentActiveMs, longestHistoryMs);
     if (maxAchieved >= targetMs) return 100;
-    const percentage = (maxAchieved / targetMs) * 100;
-    return Math.min(Math.max(Math.floor(percentage), 0), 100);
+    const p = (maxAchieved / targetMs) * 100;
+    return Math.min(Math.max(Math.floor(p), 0), 100);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.topText}>MSM</Text>
 
-      {/* Navigation / Toggle Leiste */}
+      {/* Nav Tab Leiste */}
       <View style={styles.navRow}>
         <TouchableOpacity 
           style={[styles.navButton, !showHistory && !showMilestones && styles.navButtonActive]} 
@@ -298,7 +278,6 @@ function MainApp() {
       </View>
 
       {showMilestones ? (
-        /* BADGES-ANSICHT */
         <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
           <Text style={styles.historyTitle}>Milestones & Badges</Text>
           
@@ -325,7 +304,6 @@ function MainApp() {
           })}
         </ScrollView>
       ) : showHistory ? (
-        /* HISTORY-ANSICHT */
         <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
           <Text style={styles.historyTitle}>Past Streaks</Text>
 
@@ -381,7 +359,6 @@ function MainApp() {
                 <Text style={styles.historyDate}>From: {formatDate(item.startDate)}</Text>
                 <Text style={styles.historyDate}>To: {formatDate(item.endDate)}</Text>
                 
-                {/* Notiz anzeigen, falls vorhanden */}
                 {item.note ? (
                   <View style={styles.historyNoteBox}>
                     <Text style={styles.historyNoteText}>💬 "{item.note}"</Text>
@@ -392,7 +369,6 @@ function MainApp() {
           )}
         </ScrollView>
       ) : (
-        /* TIMER-BILDSCHIRM */
         <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
           <View style={styles.card}>
             <Text style={styles.timerText}>
@@ -401,14 +377,12 @@ function MainApp() {
             <Text style={styles.streakText}>Current Streak</Text>
           </View>
 
-          {/* REKORD-KARTE */}
           <View style={styles.recordCard}>
             <Text style={styles.recordText}>
-              Best: {recordDays} Days, {recordHours} Hours, {recordMinutes} Min
+              Best: {recDays} Days, {recHours} Hours, {recMinutes} Min
             </Text>
           </View>
 
-          {/* STATISTIK-BOX */}
           <View style={styles.statsCard}>
             <Text style={styles.statsTitle}>Overview & Stats</Text>
             
@@ -436,14 +410,13 @@ function MainApp() {
             <Text style={styles.resetButtonText}>Reset Counter</Text>
           </TouchableOpacity>
 
-          {/* Debug Wipe Button */}
           <TouchableOpacity style={styles.debugButton} onPress={handleClearAllStorage}>
             <Text style={styles.debugButtonText}>Reset All Data</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
 
-      {/* MODAL: RESET NOTIZ / REFLECTION */}
+      {/* Note Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -488,7 +461,7 @@ function MainApp() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* VOLLBILD-POKAL MODAL MIT BESCHRIFTUNG UND LICHT-EFFEKT */}
+      {/* Milestone Modal */}
       <Modal
         animationType="slide"
         transparent={false}
@@ -505,13 +478,8 @@ function MainApp() {
                 <Text style={styles.fullModalTitle}>Milestone Reward</Text>
                 <Text style={styles.fullModalDesc}>{selectedMilestone.desc}</Text>
 
-                {/* DER POKAL SCREEN ELEMENT */}
                 <View style={[styles.trophyWrapper, unlocked && styles.trophyWrapperGlowing]}>
-                  
-                  {/* Füll-Effekt */}
                   <View style={[styles.trophyGoldFill, { height: `${progress}%` }]} />
-
-                  {/* Inhalt des Pokals */}
                   <View style={styles.trophyContentCenter}>
                     <Text style={styles.trophyMainIcon}>{unlocked ? "🏆" : "🔒"}</Text>
                     
@@ -556,11 +524,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginTop: 16,
-  },
-  topText2: {
-    color: "white",
-    fontSize: 18,
-    marginBottom: 10,
   },
   navRow: {
     flexDirection: 'row',
