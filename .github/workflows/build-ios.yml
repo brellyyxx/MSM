@@ -1,11 +1,11 @@
 name: Build Unsigned iOS IPA
 
 on:
-  workflow_dispatch: # Lässt sich manuell im GitHub-Tab triggern
+  workflow_dispatch:
 
 jobs:
   build-ios:
-    runs-on: macos-14 # Nutzt macOS Sonoma (aktuell stabil für Xcode)
+    runs-on: macos-14
     
     steps:
       - name: Checkout Repository
@@ -20,28 +20,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install EAS CLI (optional, aber gut für Expo prebuild)
-        run: npm install -g eas-cli
-
       - name: Run Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
       - name: Build Unsigned IPA via Xcode
         run: |
+          # Prüfen, ob der ios Ordner da ist
+          if [ ! -d "ios" ]; then
+            echo "Error: ios folder was not generated!"
+            exit 1
+          fi
+
           cd ios
           
-          # Workspace/Project ermitteln
-          WORKSPACE=$(ls -d *.xcworkspace)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 1 "Schemes:" | tail -n 1 | xargs)
-          
-          echo "Using Workspace: $WORKSPACE"
+          # Workspace ermitteln mit Fallback auf Projektdatei falls kein Workspace da ist
+          if ls *.xcworkspace 1> /dev/null 2>&1; then
+            WORKSPACE=$(ls -d *.xcworkspace)
+            BUILD_FLAG="-workspace"
+            TARGET="$WORKSPACE"
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 1 "Schemes:" | tail -n 1 | xargs)
+          else
+            WORKSPACE=$(ls -d *.xcodeproj)
+            BUILD_FLAG="-project"
+            TARGET="$WORKSPACE"
+            SCHEME=$(xcodebuild -list -project "$WORKSPACE" | grep -A 1 "Schemes:" | tail -n 1 | xargs)
+          fi
+
+          echo "Using Target: $TARGET"
           echo "Using Scheme: $SCHEME"
 
           # Ordner für den Build erstellen
           mkdir -p build/Payload
           
-          # Projekt kompilieren (Generic iOS Device, ohne Signierung erzwingen)
-          xcodebuild -workspace "$WORKSPACE" \
+          # Projekt kompilieren ohne Signierung
+          xcodebuild "$BUILD_FLAG" "$TARGET" \
             -scheme "$SCHEME" \
             -sdk iphoneos \
             -configuration Release \
@@ -59,7 +71,6 @@ jobs:
           zip -r ../../myapp-unsigned.ipn Payload
           cd ../..
           
-          # Umbenennen in .ipa
           mv myapp-unsigned.ipn myapp-unsigned.ipa
 
       - name: Upload IPA Artifact
