@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Modal } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainApp />
+    </SafeAreaProvider>
+  );
+}
+
+function MainApp() {
   const [lastResetTime, setLastResetTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState({ days: 0, hours: 0, minutes: 0 });
   const [history, setHistory] = useState([]);
@@ -15,6 +23,11 @@ export default function App() {
   // State für das Vollbild-Pokal-Modal beim Klick auf einen Meilenstein
   const [selectedMilestone, setSelectedMilestone] = useState(null);
 
+  // States für das Reset-Notizen-Modal
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [resetNoteText, setResetNoteText] = useState('');
+  const [pendingResetData, setPendingResetData] = useState(null);
+
   // 1. Daten beim Start laden
   useEffect(() => {
     loadSavedData();
@@ -22,7 +35,7 @@ export default function App() {
 
   // 2. Live-Timer jede Sekunde aktualisieren
   useEffect(() => {
-    if (!lastResetTime || showHistory || showMilestones) return;
+    if (!lastResetTime || showHistory || showMilestones || showNoteModal) return;
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -37,7 +50,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [lastResetTime, showHistory, showMilestones]);
+  }, [lastResetTime, showHistory, showMilestones, showNoteModal]);
 
   const loadSavedData = async () => {
     try {
@@ -60,7 +73,7 @@ export default function App() {
     }
   };
 
-  // 3. Reset-Logik mit automatischem Speichern in der History
+  // 3. Reset-Logik: Öffnet erst das Alert und danach das Notizen-Modal
   const handleReset = () => {
     Alert.alert(
       "Reset Counter",
@@ -70,43 +83,53 @@ export default function App() {
         { 
           text: "Reset", 
           style: "destructive", 
-          onPress: async () => {
+          onPress: () => {
             const now = Date.now();
-            
             if (lastResetTime) {
               const duration = now - lastResetTime;
-              const newHistoryItem = {
+              setPendingResetData({
                 id: now.toString(),
                 startDate: lastResetTime,
                 endDate: now,
                 durationMs: duration,
-              };
-
-              const updatedHistory = [newHistoryItem, ...history];
-              setHistory(updatedHistory);
-              await AsyncStorage.setItem('streakHistory', JSON.stringify(updatedHistory));
+              });
             }
-
-            setLastResetTime(now);
-            await AsyncStorage.setItem('lastResetTime', now.toString());
+            // Notiz-Modal öffnen
+            setResetNoteText('');
+            setShowNoteModal(true);
           } 
         }
       ]
     );
   };
 
-  // DEBUG: Zeit in der Vergangenheit manipulieren
-  const handleDebugAddOffset = async (daysToAdd, hoursToAdd) => {
-    const msToAdd = (daysToAdd * 24 * 3600 * 1000) + (hoursToAdd * 3600 * 1000);
-    const newResetTime = lastResetTime - msToAdd;
-    setLastResetTime(newResetTime);
-    await AsyncStorage.setItem('lastResetTime', newResetTime.toString());
+  // Wenn der Nutzer die Notiz speichert (oder überspringt)
+  const handleSaveResetWithNote = async (skipNote = false) => {
+    if (!pendingResetData) return;
+
+    const finalItem = {
+      ...pendingResetData,
+      note: skipNote ? '' : resetNoteText.trim(),
+    };
+
+    const updatedHistory = [finalItem, ...history];
+    setHistory(updatedHistory);
+    await AsyncStorage.setItem('streakHistory', JSON.stringify(updatedHistory));
+
+    const now = Date.now();
+    setLastResetTime(now);
+    await AsyncStorage.setItem('lastResetTime', now.toString());
+
+    // Aufräumen & Modal schließen
+    setPendingResetData(null);
+    setShowNoteModal(false);
+    setResetNoteText('');
   };
 
   // Alles komplett zurücksetzen (für Tests)
   const handleClearAllStorage = () => {
     Alert.alert(
-      "DEBUG: Clear All Data",
+      "Clear All Data",
       "This will wipe everything (Timer, History). Continue?",
       [
         { text: "Cancel", style: "cancel" },
@@ -222,21 +245,22 @@ export default function App() {
     { id: '2', days: 3, title: '3 Days', desc: 'Getting through the initial phase.' },
     { id: '3', days: 7, title: '1 Week', desc: 'A full week of total control.' },
     { id: '4', days: 14, title: '2 Weeks', desc: 'Two weeks strong!' },
-    { id: '5', days: 30, title: '30 Days', desc: 'One whole month. Amazing discipline.' },
-    { id: '6', days: 60, title: '60 Days', desc: 'Two months of unstoppable progress.' },
-    { id: '7', days: 90, title: '90 Days', desc: 'Quarter of a year milestone!' },
-    { id: '8', days: 180, title: '6 Months', desc: 'Half a year of pure dedication.' },
-    { id: '9', days: 365, title: '1 Year', desc: 'Legendary status: 365 days.' },
+    { id: '5', days: 21, title: '21 Days', desc: 'Three weeks. Habit formation unlocked.' },
+    { id: '6', days: 30, title: '30 Days', desc: 'One whole month. Amazing discipline.' },
+    { id: '7', days: 60, title: '60 Days', desc: 'Two months of unstoppable progress.' },
+    { id: '8', days: 90, title: '90 Days', desc: 'Quarter of a year milestone!' },
+    { id: '9', days: 180, title: '6 Months', desc: 'Half a year of pure dedication.' },
+    { id: '10', days: 365, title: '1 Year', desc: 'Legendary status: 365 days.' },
   ];
 
-  // Prüfen, ob ein Meilenstein erreicht wurde (aktiv oder in der History)
+  // Prüfen, ob ein Meilenstein erreicht wurde
   const isMilestoneUnlocked = (targetDays) => {
     const targetMs = targetDays * 24 * 3600 * 1000;
     if (currentActiveMs >= targetMs) return true;
     return history.some(item => item.durationMs >= targetMs);
   };
 
-  // Fortschritt in Prozent für einen bestimmten Meilenstein berechnen (0 bis 100)
+  // Fortschritt in Prozent für einen bestimmten Meilenstein berechnen
   const getMilestoneProgress = (targetDays) => {
     const targetMs = targetDays * 24 * 3600 * 1000;
     const maxAchieved = Math.max(currentActiveMs, longestHistoryMs);
@@ -246,241 +270,278 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.topText}>MSM</Text>
-        <Text style={styles.topText2}>ManStopMilking</Text>
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.topText}>MSM</Text>
+      <Text style={styles.topText2}>ManStopMilking</Text>
 
-        {/* Navigation / Toggle Leiste */}
-        <View style={styles.navRow}>
-          <TouchableOpacity 
-            style={[styles.navButton, !showHistory && !showMilestones && styles.navButtonActive]} 
-            onPress={() => { setShowHistory(false); setShowMilestones(false); }}
-          >
-            <Text style={[styles.navButtonText, !showHistory && !showMilestones && styles.navButtonTextActive]}>⏱️ Timer</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.navButton, showHistory && styles.navButtonActive]} 
-            onPress={() => { setShowHistory(true); setShowMilestones(false); }}
-          >
-            <Text style={[styles.navButtonText, showHistory && styles.navButtonTextActive]}>📜 History</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.navButton, showMilestones && styles.navButtonActive]} 
-            onPress={() => { setShowMilestones(true); setShowHistory(false); }}
-          >
-            <Text style={[styles.navButtonText, showMilestones && styles.navButtonTextActive]}>🏆 Badges</Text>
-          </TouchableOpacity>
-        </View>
-
-        {showMilestones ? (
-          /* BADGES-ANSICHT */
-          <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
-            <Text style={styles.historyTitle}>Milestones & Badges</Text>
-            
-            {milestonesList.map((m) => {
-              const unlocked = isMilestoneUnlocked(m.days);
-              const progress = getMilestoneProgress(m.days);
-              return (
-                <TouchableOpacity 
-                  key={m.id} 
-                  style={[styles.milestoneCard, unlocked ? styles.milestoneUnlocked : styles.milestoneLocked]}
-                  onPress={() => setSelectedMilestone(m)}
-                >
-                  <View style={styles.historyCardHeader}>
-                    <Text style={[styles.historyDuration, unlocked ? styles.textUnlocked : styles.textLocked]}>
-                      {unlocked ? "🏆" : "🔒"} {m.title}
-                    </Text>
-                    <Text style={[styles.milestoneBadgeStatus, unlocked ? styles.statusUnlocked : styles.statusLocked]}>
-                      {unlocked ? "Unlocked" : `${progress}%`}
-                    </Text>
-                  </View>
-                  <Text style={styles.historyDate}>{m.desc}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        ) : showHistory ? (
-          /* HISTORY-ANSICHT */
-          <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
-            <Text style={styles.historyTitle}>Past Streaks</Text>
-
-            {history.length > 0 && (
-              <>
-                <View style={styles.filterRow}>
-                  <TouchableOpacity 
-                    style={[styles.filterButton, sortBy === 'newest' && styles.filterActive]} 
-                    onPress={() => setSortBy('newest')}
-                  >
-                    <Text style={[styles.filterText, sortBy === 'newest' && styles.filterTextActive]}>Newest</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.filterButton, sortBy === 'oldest' && styles.filterActive]} 
-                    onPress={() => setSortBy('oldest')}
-                  >
-                    <Text style={[styles.filterText, sortBy === 'oldest' && styles.filterTextActive]}>Oldest</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.filterButton, sortBy === 'longest' && styles.filterActive]} 
-                    onPress={() => setSortBy('longest')}
-                  >
-                    <Text style={[styles.filterText, sortBy === 'longest' && styles.filterTextActive]}>Longest</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.filterButton, sortBy === 'shortest' && styles.filterActive]} 
-                    onPress={() => setSortBy('shortest')}
-                  >
-                    <Text style={[styles.filterText, sortBy === 'shortest' && styles.filterTextActive]}>Shortest</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity style={styles.clearAllButton} onPress={handleClearHistory}>
-                  <Text style={styles.clearAllText}>Clear All History</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {history.length === 0 ? (
-              <Text style={styles.emptyText}>No history yet. Reset your counter to save entries!</Text>
-            ) : (
-              getSortedHistory().map((item) => (
-                <View key={item.id} style={styles.historyCard}>
-                  <View style={styles.historyCardHeader}>
-                    <Text style={styles.historyDuration}>{formatDuration(item.durationMs)}</Text>
-                    <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteButton}>
-                      <Text style={styles.deleteButtonText}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.historyDate}>From: {formatDate(item.startDate)}</Text>
-                  <Text style={styles.historyDate}>To: {formatDate(item.endDate)}</Text>
-                </View>
-              ))
-            )}
-          </ScrollView>
-        ) : (
-          /* TIMER-BILDSCHIRM */
-          <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
-            <View style={styles.card}>
-              <Text style={styles.timerText}>
-                {elapsedTime.days} Days, {elapsedTime.hours} Hours, {elapsedTime.minutes} Min
-              </Text>
-              <Text style={styles.streakText}>Current Streak</Text>
-            </View>
-
-            {/* REKORD-KARTE */}
-            <View style={styles.recordCard}>
-              <Text style={styles.recordText}>
-                Best: {recordDays} Days, {recordHours} Hours, {recordMinutes} Min
-              </Text>
-            </View>
-
-            {/* STATISTIK-BOX */}
-            <View style={styles.statsCard}>
-              <Text style={styles.statsTitle}>Overview & Stats</Text>
-              
-              <View style={styles.statsItem}>
-                <Text style={styles.statsLabel}>Total Resets</Text>
-                <Text style={styles.statsValue}>{totalResets}</Text>
-              </View>
-
-              <View style={styles.statsDivider} />
-
-              <View style={styles.statsItem}>
-                <Text style={styles.statsLabel}>Average Streak</Text>
-                <Text style={styles.statsValue}>{formatDuration(averageMs)}</Text>
-              </View>
-
-              <View style={styles.statsDivider} />
-
-              <View style={styles.statsItem}>
-                <Text style={styles.statsLabel}>Total Clean Time</Text>
-                <Text style={styles.statsValue}>{formatDuration(totalCleanTimeMs)}</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-              <Text style={styles.resetButtonText}>Reset Counter</Text>
-            </TouchableOpacity>
-
-            {/* DEBUG TOOLS */}
-            <View style={styles.debugRow}>
-              <TouchableOpacity style={styles.debugSmallButton} onPress={() => handleDebugAddOffset(1, 0)}>
-                <Text style={styles.debugSmallText}>+1 Day</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.debugSmallButton} onPress={() => handleDebugAddOffset(7, 0)}>
-                <Text style={styles.debugSmallText}>+7 Days</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.debugSmallButton} onPress={() => handleDebugAddOffset(30, 0)}>
-                <Text style={styles.debugSmallText}>+30 Days</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Debug Wipe Button */}
-            <TouchableOpacity style={styles.debugButton} onPress={handleClearAllStorage}>
-              <Text style={styles.debugButtonText}>DEBUG: Reset All Data</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-
-        {/* VOLLBILD-POKAL MODAL MIT BESCHRIFTUNG UND LICHT-EFFEKT */}
-        <Modal
-          animationType="slide"
-          transparent={false}
-          visible={selectedMilestone !== null}
-          onRequestClose={() => setSelectedMilestone(null)}
+      {/* Navigation / Toggle Leiste */}
+      <View style={styles.navRow}>
+        <TouchableOpacity 
+          style={[styles.navButton, !showHistory && !showMilestones && styles.navButtonActive]} 
+          onPress={() => { setShowHistory(false); setShowMilestones(false); }}
         >
-          <SafeAreaView style={styles.fullModalContainer}>
-            {selectedMilestone && (() => {
-              const progress = getMilestoneProgress(selectedMilestone.days);
-              const unlocked = isMilestoneUnlocked(selectedMilestone.days);
+          <Text style={[styles.navButtonText, !showHistory && !showMilestones && styles.navButtonTextActive]}>⏱️ Timer</Text>
+        </TouchableOpacity>
 
-              return (
-                <View style={styles.fullModalInner}>
-                  <Text style={styles.fullModalTitle}>Milestone Reward</Text>
-                  <Text style={styles.fullModalDesc}>{selectedMilestone.desc}</Text>
+        <TouchableOpacity 
+          style={[styles.navButton, showHistory && styles.navButtonActive]} 
+          onPress={() => { setShowHistory(true); setShowMilestones(false); }}
+        >
+          <Text style={[styles.navButtonText, showHistory && styles.navButtonTextActive]}>📜 History</Text>
+        </TouchableOpacity>
 
-                  {/* DER POKAL SCREEN ELEMENT */}
-                  <View style={[styles.trophyWrapper, unlocked && styles.trophyWrapperGlowing]}>
-                    
-                    {/* Füll-Effekt (je mehr Fortschritt, desto goldener/heller wird er von unten gefüllt) */}
-                    <View style={[styles.trophyGoldFill, { height: `${progress}%` }]} />
+        <TouchableOpacity 
+          style={[styles.navButton, showMilestones && styles.navButtonActive]} 
+          onPress={() => { setShowMilestones(true); setShowHistory(false); }}
+        >
+          <Text style={[styles.navButtonText, showMilestones && styles.navButtonTextActive]}>🏆 Badges</Text>
+        </TouchableOpacity>
+      </View>
 
-                    {/* Inhalt des Pokals: Das Icon und DIREKT DARAUF der Tag (z.B. "24 Hours") */}
-                    <View style={styles.trophyContentCenter}>
-                      <Text style={styles.trophyMainIcon}>{unlocked ? "🏆" : "🔒"}</Text>
-                      
-                      <View style={styles.trophyEmblemTag}>
-                        <Text style={styles.trophyEmblemText}>{selectedMilestone.title}</Text>
-                      </View>
-
-                      <Text style={styles.trophyProgressLabel}>{progress}% Complete</Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.fullModalStatus}>
-                    {unlocked ? "🌟 Legendary Status Unlocked! 🌟" : `Keep going! Light fills up as you progress.`}
+      {showMilestones ? (
+        /* BADGES-ANSICHT */
+        <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
+          <Text style={styles.historyTitle}>Milestones & Badges</Text>
+          
+          {milestonesList.map((m) => {
+            const unlocked = isMilestoneUnlocked(m.days);
+            const progress = getMilestoneProgress(m.days);
+            return (
+              <TouchableOpacity 
+                key={m.id} 
+                style={[styles.milestoneCard, unlocked ? styles.milestoneUnlocked : styles.milestoneLocked]}
+                onPress={() => setSelectedMilestone(m)}
+              >
+                <View style={styles.historyCardHeader}>
+                  <Text style={[styles.historyDuration, unlocked ? styles.textUnlocked : styles.textLocked]}>
+                    {unlocked ? "🏆" : "🔒"} {m.title}
                   </Text>
+                  <Text style={[styles.milestoneBadgeStatus, unlocked ? styles.statusUnlocked : styles.statusLocked]}>
+                    {unlocked ? "Unlocked" : `${progress}%`}
+                  </Text>
+                </View>
+                <Text style={styles.historyDate}>{m.desc}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : showHistory ? (
+        /* HISTORY-ANSICHT */
+        <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
+          <Text style={styles.historyTitle}>Past Streaks</Text>
 
-                  <TouchableOpacity 
-                    style={styles.fullModalCloseButton} 
-                    onPress={() => setSelectedMilestone(null)}
-                  >
-                    <Text style={styles.fullModalCloseButtonText}>Back to Badges</Text>
+          {history.length > 0 && (
+            <>
+              <View style={styles.filterRow}>
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'newest' && styles.filterActive]} 
+                  onPress={() => setSortBy('newest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'newest' && styles.filterTextActive]}>Newest</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'oldest' && styles.filterActive]} 
+                  onPress={() => setSortBy('oldest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'oldest' && styles.filterTextActive]}>Oldest</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'longest' && styles.filterActive]} 
+                  onPress={() => setSortBy('longest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'longest' && styles.filterTextActive]}>Longest</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.filterButton, sortBy === 'shortest' && styles.filterActive]} 
+                  onPress={() => setSortBy('shortest')}
+                >
+                  <Text style={[styles.filterText, sortBy === 'shortest' && styles.filterTextActive]}>Shortest</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.clearAllButton} onPress={handleClearHistory}>
+                <Text style={styles.clearAllText}>Clear All History</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {history.length === 0 ? (
+            <Text style={styles.emptyText}>No history yet. Reset your counter to save entries!</Text>
+          ) : (
+            getSortedHistory().map((item) => (
+              <View key={item.id} style={styles.historyCard}>
+                <View style={styles.historyCardHeader}>
+                  <Text style={styles.historyDuration}>{formatDuration(item.durationMs)}</Text>
+                  <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteButton}>
+                    <Text style={styles.deleteButtonText}>✕</Text>
                   </TouchableOpacity>
                 </View>
-              );
-            })()}
-          </SafeAreaView>
-        </Modal>
+                <Text style={styles.historyDate}>From: {formatDate(item.startDate)}</Text>
+                <Text style={styles.historyDate}>To: {formatDate(item.endDate)}</Text>
+                
+                {/* Notiz anzeigen, falls vorhanden */}
+                {item.note ? (
+                  <View style={styles.historyNoteBox}>
+                    <Text style={styles.historyNoteText}>💬 "{item.note}"</Text>
+                  </View>
+                ) : null}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      ) : (
+        /* TIMER-BILDSCHIRM */
+        <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
+          <View style={styles.card}>
+            <Text style={styles.timerText}>
+              {elapsedTime.days} Days, {elapsedTime.hours} Hours, {elapsedTime.minutes} Min
+            </Text>
+            <Text style={styles.streakText}>Current Streak</Text>
+          </View>
 
-        <StatusBar style="light" />
-      </SafeAreaView>
-    </SafeAreaProvider>
+          {/* REKORD-KARTE */}
+          <View style={styles.recordCard}>
+            <Text style={styles.recordText}>
+              Best: {recordDays} Days, {recordHours} Hours, {recordMinutes} Min
+            </Text>
+          </View>
+
+          {/* STATISTIK-BOX */}
+          <View style={styles.statsCard}>
+            <Text style={styles.statsTitle}>Overview & Stats</Text>
+            
+            <View style={styles.statsItem}>
+              <Text style={styles.statsLabel}>Total Resets</Text>
+              <Text style={styles.statsValue}>{totalResets}</Text>
+            </View>
+
+            <View style={styles.statsDivider} />
+
+            <View style={styles.statsItem}>
+              <Text style={styles.statsLabel}>Average Streak</Text>
+              <Text style={styles.statsValue}>{formatDuration(averageMs)}</Text>
+            </View>
+
+            <View style={styles.statsDivider} />
+
+            <View style={styles.statsItem}>
+              <Text style={styles.statsLabel}>Total Clean Time</Text>
+              <Text style={styles.statsValue}>{formatDuration(totalCleanTimeMs)}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
+            <Text style={styles.resetButtonText}>Reset Counter</Text>
+          </TouchableOpacity>
+
+          {/* Debug Wipe Button */}
+          <TouchableOpacity style={styles.debugButton} onPress={handleClearAllStorage}>
+            <Text style={styles.debugButtonText}>Reset All Data</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
+      {/* MODAL: RESET NOTIZ / REFLECTION */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showNoteModal}
+        onRequestClose={() => handleSaveResetWithNote(true)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.noteModalOverlay}
+        >
+          <View style={styles.noteModalContent}>
+            <Text style={styles.noteModalTitle}>Streak Reset Reflection</Text>
+            <Text style={styles.noteModalDesc}>
+              Why did this happen? What triggered it or how are you feeling right now? (Optional)
+            </Text>
+
+            <TextInput
+              style={styles.noteTextInput}
+              placeholder="e.g., Stress at work, late at night..."
+              placeholderTextColor="#64748b"
+              multiline={true}
+              value={resetNoteText}
+              onChangeText={setResetNoteText}
+            />
+
+            <View style={styles.noteModalButtonsRow}>
+              <TouchableOpacity 
+                style={styles.noteSkipButton} 
+                onPress={() => handleSaveResetWithNote(true)}
+              >
+                <Text style={styles.noteSkipButtonText}>Skip</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.noteSaveButton} 
+                onPress={() => handleSaveResetWithNote(false)}
+              >
+                <Text style={styles.noteSaveButtonText}>Save Note</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* VOLLBILD-POKAL MODAL MIT BESCHRIFTUNG UND LICHT-EFFEKT */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={selectedMilestone !== null}
+        onRequestClose={() => setSelectedMilestone(null)}
+      >
+        <SafeAreaView style={styles.fullModalContainer}>
+          {selectedMilestone && (() => {
+            const progress = getMilestoneProgress(selectedMilestone.days);
+            const unlocked = isMilestoneUnlocked(selectedMilestone.days);
+
+            return (
+              <View style={styles.fullModalInner}>
+                <Text style={styles.fullModalTitle}>Milestone Reward</Text>
+                <Text style={styles.fullModalDesc}>{selectedMilestone.desc}</Text>
+
+                {/* DER POKAL SCREEN ELEMENT */}
+                <View style={[styles.trophyWrapper, unlocked && styles.trophyWrapperGlowing]}>
+                  
+                  {/* Füll-Effekt */}
+                  <View style={[styles.trophyGoldFill, { height: `${progress}%` }]} />
+
+                  {/* Inhalt des Pokals */}
+                  <View style={styles.trophyContentCenter}>
+                    <Text style={styles.trophyMainIcon}>{unlocked ? "🏆" : "🔒"}</Text>
+                    
+                    <View style={styles.trophyEmblemTag}>
+                      <Text style={styles.trophyEmblemText}>{selectedMilestone.title}</Text>
+                    </View>
+
+                    <Text style={styles.trophyProgressLabel}>{progress}% Complete</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fullModalStatus}>
+                  {unlocked ? "🌟 Legendary Status Unlocked! 🌟" : `Keep going! Light fills up as you progress.`}
+                </Text>
+
+                <TouchableOpacity 
+                  style={styles.fullModalCloseButton} 
+                  onPress={() => setSelectedMilestone(null)}
+                >
+                  <Text style={styles.fullModalCloseButtonText}>Back to Badges</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })()}
+        </SafeAreaView>
+      </Modal>
+
+      <StatusBar style="light" />
+    </SafeAreaView>
   );
 }
 
@@ -588,27 +649,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  debugRow: {
-    flexDirection: 'row',
-    width: '90%',
-    justifyContent: 'space-between',
-    marginTop: 15,
-  },
-  debugSmallButton: {
-    backgroundColor: '#334155',
-    flex: 1,
-    marginHorizontal: 4,
-    paddingVertical: 10,
-    borderRadius: 15,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#475569',
-  },
-  debugSmallText: {
-    color: '#38bdf8',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   debugButton: {
     backgroundColor: '#ef4444',
     width: '90%',
@@ -619,7 +659,7 @@ const styles = StyleSheet.create({
   },
   debugButtonText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   historyContainer: {
@@ -722,6 +762,19 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 12,
   },
+  historyNoteBox: {
+    marginTop: 8,
+    backgroundColor: '#1b2638',
+    padding: 10,
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#38bdf8',
+  },
+  historyNoteText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
   milestoneCard: {
     backgroundColor: '#24344d',
     width: '90%',
@@ -777,7 +830,76 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 12,
   },
-  // Vollbild Modal Styles für den Pokal-Bildschirm
+  noteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(9, 13, 22, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  noteModalContent: {
+    backgroundColor: '#24344d',
+    width: '100%',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  noteModalTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noteModalDesc: {
+    color: '#94a3b8',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  noteTextInput: {
+    backgroundColor: '#162231',
+    color: 'white',
+    borderRadius: 12,
+    padding: 12,
+    height: 90,
+    textAlignVertical: 'top',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 15,
+  },
+  noteModalButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  noteSkipButton: {
+    flex: 1,
+    backgroundColor: '#334155',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  noteSkipButtonText: {
+    color: '#94a3b8',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  noteSaveButton: {
+    flex: 1,
+    backgroundColor: '#38bdf8',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  noteSaveButtonText: {
+    color: '#1c293b',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
   fullModalContainer: {
     flex: 1,
     backgroundColor: '#090d16',
@@ -787,7 +909,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 25,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
   },
   fullModalTitle: {
     color: '#fbbf24',
@@ -829,7 +951,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(251, 191, 36, 0.22)', // Strahlendes Licht von unten
+    backgroundColor: 'rgba(251, 191, 36, 0.22)',
     borderTopWidth: 2,
     borderTopColor: '#fbbf24',
   },
