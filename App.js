@@ -272,7 +272,6 @@ function MainApp() {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.topText}>MSM</Text>
-      <Text style={styles.topText2}>ManStopMilking</Text>
 
       {/* Navigation / Toggle Leiste */}
       <View style={styles.navRow}>
@@ -556,7 +555,7 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 24,
     fontWeight: "bold",
-    marginTop: 10,
+    marginTop: 16,
   },
   topText2: {
     color: "white",
