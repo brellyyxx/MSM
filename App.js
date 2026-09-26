@@ -9,6 +9,7 @@ export default function App() {
   const [elapsedTime, setElapsedTime] = useState({ days: 0, hours: 0, minutes: 0 });
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showMilestones, setShowMilestones] = useState(false);
   const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'longest', 'shortest'
 
   // 1. Daten beim Start laden
@@ -18,7 +19,7 @@ export default function App() {
 
   // 2. Live-Timer jede Sekunde aktualisieren
   useEffect(() => {
-    if (!lastResetTime || showHistory) return;
+    if (!lastResetTime || showHistory || showMilestones) return;
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -33,7 +34,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [lastResetTime, showHistory]);
+  }, [lastResetTime, showHistory, showMilestones]);
 
   const loadSavedData = async () => {
     try {
@@ -94,7 +95,7 @@ export default function App() {
   // (Optional) Alles komplett zurücksetzen (für Tests)
   const handleClearAllStorage = () => {
     Alert.alert(
-      "Clear All Data",
+      "DEBUG: Clear All Data",
       "This will wipe everything (Timer, History). Continue?",
       [
         { text: "Cancel", style: "cancel" },
@@ -204,23 +205,79 @@ export default function App() {
   const recordHours = Math.floor((recordTotalSeconds % (3600 * 24)) / 3600);
   const recordMinutes = Math.floor((recordTotalSeconds % 3600) / 60);
 
+  // Meilensteine Definition
+  const milestonesList = [
+    { id: '1', days: 1, title: '24 Hours', desc: 'The first full day mastered.' },
+    { id: '2', days: 3, title: '3 Days', desc: 'Getting through the initial phase.' },
+    { id: '3', days: 7, title: '1 Week', desc: 'A full week of total control.' },
+    { id: '4', days: 14, title: '2 Weeks', desc: 'Two weeks strong!' },
+    { id: '5', days: 30, title: '30 Days', desc: 'One whole month. Amazing discipline.' },
+    { id: '6', days: 60, title: '60 Days', desc: 'Two months of unstoppable progress.' },
+    { id: '7', days: 90, title: '90 Days', desc: 'Quarter of a year milestone!' },
+    { id: '8', days: 180, title: '6 Months', desc: 'Half a year of pure dedication.' },
+    { id: '9', days: 365, title: '1 Year', desc: 'Legendary status: 365 days.' },
+  ];
+
+  // Prüfen, ob ein Meilenstein erreicht wurde (aktiv oder in der History)
+  const isMilestoneUnlocked = (targetDays) => {
+    const targetMs = targetDays * 24 * 3600 * 1000;
+    if (currentActiveMs >= targetMs) return true;
+    return history.some(item => item.durationMs >= targetMs);
+  };
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
         <Text style={styles.topText}>MSM</Text>
         <Text style={styles.topText2}>ManStopMilking</Text>
 
-        {/* Ansicht umschalten (Timer vs. History) */}
-        <TouchableOpacity 
-          style={styles.toggleButton} 
-          onPress={() => setShowHistory(!showHistory)}
-        >
-          <Text style={styles.toggleButtonText}>
-            {showHistory ? "← Back to Timer" : "📜 View History"}
-          </Text>
-        </TouchableOpacity>
+        {/* Navigation / Toggle Leiste (Timer vs. History vs. Badges) */}
+        <View style={styles.navRow}>
+          <TouchableOpacity 
+            style={[styles.navButton, !showHistory && !showMilestones && styles.navButtonActive]} 
+            onPress={() => { setShowHistory(false); setShowMilestones(false); }}
+          >
+            <Text style={[styles.navButtonText, !showHistory && !showMilestones && styles.navButtonTextActive]}>⏱️ Timer</Text>
+          </TouchableOpacity>
 
-        {showHistory ? (
+          <TouchableOpacity 
+            style={[styles.navButton, showHistory && styles.navButtonActive]} 
+            onPress={() => { setShowHistory(true); setShowMilestones(false); }}
+          >
+            <Text style={[styles.navButtonText, showHistory && styles.navButtonTextActive]}>📜 History</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.navButton, showMilestones && styles.navButtonActive]} 
+            onPress={() => { setShowMilestones(true); setShowHistory(false); }}
+          >
+            <Text style={[styles.navButtonText, showMilestones && styles.navButtonTextActive]}>🏆 Badges</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showMilestones ? (
+          /* HIER IST DIE MEILENSTEIN- / BADGES-ANSICHT */
+          <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
+            <Text style={styles.historyTitle}>Milestones & Badges</Text>
+            
+            {milestonesList.map((m) => {
+              const unlocked = isMilestoneUnlocked(m.days);
+              return (
+                <View key={m.id} style={[styles.milestoneCard, unlocked ? styles.milestoneUnlocked : styles.milestoneLocked]}>
+                  <View style={styles.historyCardHeader}>
+                    <Text style={[styles.historyDuration, unlocked ? styles.textUnlocked : styles.textLocked]}>
+                      {unlocked ? "🏆" : "🔒"} {m.title}
+                    </Text>
+                    <Text style={[styles.milestoneBadgeStatus, unlocked ? styles.statusUnlocked : styles.statusLocked]}>
+                      {unlocked ? "Unlocked" : `${m.days} Days`}
+                    </Text>
+                  </View>
+                  <Text style={styles.historyDate}>{m.desc}</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        ) : showHistory ? (
           /* HIER IST DIE HISTORY-ANSICHT */
           <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
             <Text style={styles.historyTitle}>Past Streaks</Text>
@@ -297,7 +354,7 @@ export default function App() {
               </Text>
             </View>
 
-            {/* STATISTIK-BOX (Kompakter & übersichtlicher) */}
+            {/* STATISTIK-BOX */}
             <View style={styles.statsCard}>
               <Text style={styles.statsTitle}>Overview & Stats</Text>
               
@@ -327,7 +384,7 @@ export default function App() {
 
             {/* Debug Wipe Button */}
             <TouchableOpacity style={styles.debugButton} onPress={handleClearAllStorage}>
-              <Text style={styles.debugButtonText}>Reset All Data</Text>
+              <Text style={styles.debugButtonText}>DEBUG: Reset All Data</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -356,17 +413,31 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 10,
   },
-  toggleButton: {
-    backgroundColor: '#334155',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
+  navRow: {
+    flexDirection: 'row',
+    backgroundColor: '#162231',
     borderRadius: 20,
+    padding: 4,
     marginBottom: 15,
+    width: '90%',
+    justifyContent: 'space-between',
   },
-  toggleButtonText: {
-    color: '#38bdf8',
-    fontSize: 14,
+  navButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  navButtonActive: {
+    backgroundColor: '#334155',
+  },
+  navButtonText: {
+    color: '#94a3b8',
+    fontSize: 13,
     fontWeight: 'bold',
+  },
+  navButtonTextActive: {
+    color: '#38bdf8',
   },
   card: {
     backgroundColor: '#24344d',
@@ -438,7 +509,7 @@ const styles = StyleSheet.create({
   },
   debugButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   historyContainer: {
@@ -540,6 +611,38 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     marginBottom: 12,
+  },
+  milestoneCard: {
+    backgroundColor: '#24344d',
+    width: '90%',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  milestoneUnlocked: {
+    borderColor: '#38bdf8',
+    backgroundColor: '#1e293b',
+  },
+  milestoneLocked: {
+    opacity: 0.6,
+  },
+  textUnlocked: {
+    color: '#38bdf8',
+  },
+  textLocked: {
+    color: '#94a3b8',
+  },
+  milestoneBadgeStatus: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  statusUnlocked: {
+    color: '#38bdf8',
+  },
+  statusLocked: {
+    color: '#94a3b8',
   },
   historyCardHeader: {
     flexDirection: 'row',
