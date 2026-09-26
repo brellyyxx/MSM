@@ -20,12 +20,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Expo Prebuild
-        run: npx expo prebuild --platform ios --clean
+      - name: Run Expo Prebuild & CocoaPods
+        run: |
+          npx expo prebuild --platform ios --clean
+          cd ios
+          pod install
+          cd ..
 
       - name: Build Unsigned IPA via Xcode
         run: |
-          # Prüfen, ob der ios Ordner da ist
           if [ ! -d "ios" ]; then
             echo "Error: ios folder was not generated!"
             exit 1
@@ -33,7 +36,7 @@ jobs:
 
           cd ios
           
-          # Workspace ermitteln mit Fallback auf Projektdatei falls kein Workspace da ist
+          # Da CocoaPods installiert wurden, nutzen wir jetzt garantiert den Workspace (.xcworkspace)
           if ls *.xcworkspace 1> /dev/null 2>&1; then
             WORKSPACE=$(ls -d *.xcworkspace)
             BUILD_FLAG="-workspace"
@@ -49,10 +52,8 @@ jobs:
           echo "Using Target: $TARGET"
           echo "Using Scheme: $SCHEME"
 
-          # Ordner für den Build erstellen
           mkdir -p build/Payload
           
-          # Projekt kompilieren ohne Signierung
           xcodebuild "$BUILD_FLAG" "$TARGET" \
             -scheme "$SCHEME" \
             -sdk iphoneos \
@@ -63,10 +64,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-          # App-Bundle in den Payload-Ordner schieben
           cp -r "build/App.xcarchive/Products/Applications/"*.app build/Payload/
           
-          # In IPA verpacken
           cd build
           zip -r ../../myapp-unsigned.ipn Payload
           cd ../..
