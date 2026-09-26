@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
@@ -29,14 +29,23 @@ jobs:
 
       - name: Build unsigned app
         run: |
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" | head -n 1)
           PROJECT=$(find ios -maxdepth 1 -name "*.xcodeproj" | head -n 1)
+
+          if [ -n "$WORKSPACE" ]; then
+            echo "Using workspace: $WORKSPACE"
+            BUILD_TARGET="-workspace $WORKSPACE"
+          else
+            echo "No workspace found, using project: $PROJECT"
+            BUILD_TARGET="-project $PROJECT"
+          fi
+
           SCHEME=$(basename "$PROJECT" .xcodeproj)
 
-          echo "Project: $PROJECT"
           echo "Scheme: $SCHEME"
 
           xcodebuild \
-            -project "$PROJECT" \
+            $BUILD_TARGET \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
