@@ -7,7 +7,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function App() {
   const [lastResetTime, setLastResetTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState({ days: 0, hours: 0, minutes: 0 });
-  const [bestStreakMs, setBestStreakMs] = useState(0);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'longest', 'shortest'
@@ -31,20 +30,14 @@ export default function App() {
       const minutes = Math.floor((totalSeconds % 3600) / 60);
 
       setElapsedTime({ days, hours, minutes });
-
-      if (difference > bestStreakMs) {
-        setBestStreakMs(difference);
-        AsyncStorage.setItem('bestStreakMs', difference.toString());
-      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [lastResetTime, bestStreakMs, showHistory]);
+  }, [lastResetTime, showHistory]);
 
   const loadSavedData = async () => {
     try {
       const savedReset = await AsyncStorage.getItem('lastResetTime');
-      const savedBest = await AsyncStorage.getItem('bestStreakMs');
       const savedHistory = await AsyncStorage.getItem('streakHistory');
 
       if (savedReset) {
@@ -53,10 +46,6 @@ export default function App() {
         const now = Date.now();
         setLastResetTime(now);
         await AsyncStorage.setItem('lastResetTime', now.toString());
-      }
-
-      if (savedBest) {
-        setBestStreakMs(parseInt(savedBest, 10));
       }
 
       if (savedHistory) {
@@ -102,7 +91,33 @@ export default function App() {
     );
   };
 
-  // --- NEU: Einzelnen History-Eintrag löschen ---
+  // (Optional) Alles komplett zurücksetzen (für Tests)
+  const handleClearAllStorage = () => {
+    Alert.alert(
+      "Clear All Data",
+      "This will wipe everything (Timer, History). Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Wipe Everything",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.clear();
+              setHistory([]);
+              const now = Date.now();
+              setLastResetTime(now);
+              await AsyncStorage.setItem('lastResetTime', now.toString());
+            } catch (error) {
+              console.log("Fehler beim Zurücksetzen:", error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Einzelnen History-Eintrag löschen
   const handleDeleteItem = (id) => {
     Alert.alert(
       "Delete Entry",
@@ -122,7 +137,7 @@ export default function App() {
     );
   };
 
-  // --- NEU: Komplettes History löschen ---
+  // Komplettes History löschen
   const handleClearHistory = () => {
     Alert.alert(
       "Clear History",
@@ -174,7 +189,16 @@ export default function App() {
     });
   };
 
-  // Rekord umrechnen
+  // Statistiken berechnen
+  const totalResets = history.length;
+  const totalCleanTimeMs = history.reduce((sum, item) => sum + item.durationMs, 0);
+  const averageMs = totalResets > 0 ? Math.floor(totalCleanTimeMs / totalResets) : 0;
+
+  // REKORD AUTOMATISCH AUS DER HISTORY ERMITTELN (Längster Eintrag)
+  const currentActiveMs = lastResetTime ? Date.now() - lastResetTime : 0;
+  const longestHistoryMs = history.length > 0 ? Math.max(...history.map(item => item.durationMs)) : 0;
+  const bestStreakMs = Math.max(currentActiveMs, longestHistoryMs);
+
   const recordTotalSeconds = Math.floor(bestStreakMs / 1000);
   const recordDays = Math.floor(recordTotalSeconds / (3600 * 24));
   const recordHours = Math.floor((recordTotalSeconds % (3600 * 24)) / 3600);
@@ -201,7 +225,6 @@ export default function App() {
           <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
             <Text style={styles.historyTitle}>Past Streaks</Text>
 
-            {/* Filter-Buttons nebeneinander */}
             {history.length > 0 && (
               <>
                 <View style={styles.filterRow}>
@@ -234,7 +257,6 @@ export default function App() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Clear All Button */}
                 <TouchableOpacity style={styles.clearAllButton} onPress={handleClearHistory}>
                   <Text style={styles.clearAllText}>Clear All History</Text>
                 </TouchableOpacity>
@@ -248,7 +270,6 @@ export default function App() {
                 <View key={item.id} style={styles.historyCard}>
                   <View style={styles.historyCardHeader}>
                     <Text style={styles.historyDuration}>{formatDuration(item.durationMs)}</Text>
-                    {/* Einzelner Lösch-Button */}
                     <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteButton}>
                       <Text style={styles.deleteButtonText}>✕</Text>
                     </TouchableOpacity>
@@ -261,7 +282,7 @@ export default function App() {
           </ScrollView>
         ) : (
           /* HIER IST DER NORMALE TIMER-BILDSCHIRM */
-          <>
+          <ScrollView style={styles.historyContainer} contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}>
             <View style={styles.card}>
               <Text style={styles.timerText}>
                 {elapsedTime.days} Days, {elapsedTime.hours} Hours, {elapsedTime.minutes} Min
@@ -269,16 +290,46 @@ export default function App() {
               <Text style={styles.streakText}>Current Streak</Text>
             </View>
 
+            {/* REKORD-KARTE */}
             <View style={styles.recordCard}>
               <Text style={styles.recordText}>
                 Best: {recordDays} Days, {recordHours} Hours, {recordMinutes} Min
               </Text>
             </View>
 
+            {/* STATISTIK-BOX (Kompakter & übersichtlicher) */}
+            <View style={styles.statsCard}>
+              <Text style={styles.statsTitle}>Overview & Stats</Text>
+              
+              <View style={styles.statsItem}>
+                <Text style={styles.statsLabel}>Total Resets</Text>
+                <Text style={styles.statsValue}>{totalResets}</Text>
+              </View>
+
+              <View style={styles.statsDivider} />
+
+              <View style={styles.statsItem}>
+                <Text style={styles.statsLabel}>Average Streak</Text>
+                <Text style={styles.statsValue}>{formatDuration(averageMs)}</Text>
+              </View>
+
+              <View style={styles.statsDivider} />
+
+              <View style={styles.statsItem}>
+                <Text style={styles.statsLabel}>Total Clean Time</Text>
+                <Text style={styles.statsValue}>{formatDuration(totalCleanTimeMs)}</Text>
+              </View>
+            </View>
+
             <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
               <Text style={styles.resetButtonText}>Reset Counter</Text>
             </TouchableOpacity>
-          </>
+
+            {/* Debug Wipe Button */}
+            <TouchableOpacity style={styles.debugButton} onPress={handleClearAllStorage}>
+              <Text style={styles.debugButtonText}>Reset All Data</Text>
+            </TouchableOpacity>
+          </ScrollView>
         )}
 
         <StatusBar style="light" />
@@ -336,8 +387,9 @@ const styles = StyleSheet.create({
     width: '90%',
     borderRadius: 15,
     paddingVertical: 15,
+    paddingHorizontal: 15,
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 15,
   },
   recordText: {
     color: '#fbbf24',
@@ -346,7 +398,7 @@ const styles = StyleSheet.create({
   },
   timerText: {
     color: 'white',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center',
@@ -369,9 +421,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 4,
+    marginTop: 10,
   },
   resetButtonText: {
     color: '#1c293b',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  debugButton: {
+    backgroundColor: '#ef4444',
+    width: '90%',
+    paddingVertical: 12,
+    borderRadius: 30,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  debugButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -409,6 +475,48 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: '#1c293b',
+  },
+  statsCard: {
+    backgroundColor: '#24344d',
+    width: '90%',
+    borderRadius: 15,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  statsTitle: {
+    color: '#38bdf8',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statsItem: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  statsLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  statsValue: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  statsDivider: {
+    height: 1,
+    backgroundColor: '#334155',
+    marginVertical: 6,
+    width: '100%',
   },
   clearAllButton: {
     marginBottom: 15,
