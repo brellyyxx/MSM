@@ -6,7 +6,7 @@ on:
 jobs:
   build-ios:
     runs-on: macos-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -35,25 +35,24 @@ jobs:
           fi
 
           cd ios
-          
-          # Da CocoaPods installiert wurden, nutzen wir jetzt garantiert den Workspace (.xcworkspace)
+
           if ls *.xcworkspace 1> /dev/null 2>&1; then
             WORKSPACE=$(ls -d *.xcworkspace)
             BUILD_FLAG="-workspace"
             TARGET="$WORKSPACE"
-            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           else
             WORKSPACE=$(ls -d *.xcodeproj)
             BUILD_FLAG="-project"
             TARGET="$WORKSPACE"
-            SCHEME=$(xcodebuild -list -project "$WORKSPACE" | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           fi
+
+          SCHEME=$(basename "$WORKSPACE" | sed 's/\.[^.]*$//')
 
           echo "Using Target: $TARGET"
           echo "Using Scheme: $SCHEME"
 
           mkdir -p build/Payload
-          
+
           xcodebuild "$BUILD_FLAG" "$TARGET" \
             -scheme "$SCHEME" \
             -sdk iphoneos \
@@ -65,11 +64,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
           cp -r "build/App.xcarchive/Products/Applications/"*.app build/Payload/
-          
+
           cd build
           zip -r ../../myapp-unsigned.ipn Payload
           cd ../..
-          
+
           mv myapp-unsigned.ipn myapp-unsigned.ipa
 
       - name: Upload IPA Artifact
