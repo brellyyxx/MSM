@@ -23,21 +23,56 @@ jobs:
       - name: Expo prebuild
         run: npx expo prebuild --platform ios
 
+      - name: Find iOS project
+        run: |
+          echo "=== iOS files ==="
+          find ios -maxdepth 2 -type f | sort
+          echo "=== Workspaces ==="
+          find ios -maxdepth 1 -name "*.xcworkspace"
+          echo "=== Projects ==="
+          find ios -maxdepth 1 -name "*.xcodeproj"
+
       - name: Build unsigned app
         run: |
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" | head -n 1)
+          PROJECT=$(find ios -maxdepth 1 -name "*.xcodeproj" | head -n 1)
+
+          if [ -z "$WORKSPACE" ]; then
+            echo "No .xcworkspace found, using .xcodeproj"
+            BUILD_TARGET="-project $PROJECT"
+          else
+            echo "Using workspace: $WORKSPACE"
+            BUILD_TARGET="-workspace $WORKSPACE"
+          fi
+
+          SCHEME=$(basename "$PROJECT" .xcodeproj)
+
+          echo "Project: $PROJECT"
+          echo "Scheme: $SCHEME"
+
           xcodebuild \
-            -workspace ios/*.xcworkspace \
-            -scheme "$(basename ios/*.xcodeproj .xcodeproj)" \
+            $BUILD_TARGET \
+            -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
 
-      - name: Create IPA
+      - name: Create unsigned IPA
         run: |
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
+
+          if [ -z "$APP" ]; then
+            echo "No .app found!"
+            exit 1
+          fi
+
+          echo "Found app: $APP"
+
           mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/*.app Payload/
+          cp -R "$APP" Payload/
+
           zip -r MSM.ipa Payload
 
       - name: Upload IPA
